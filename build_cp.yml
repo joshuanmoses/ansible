@@ -1,0 +1,121 @@
+---
+- hosts: localhost
+  gather_facts: false
+  vars:
+    pvwa: https://comp01a.cyber-ark-demo.local
+    tmp_folder: /home/user01/Ansible-Deploy-CP
+    tmp_json: file.json
+    zip_file: RHELinux-x64-10.10.zip
+    install_path: /opt/InstallFiles/RHELinux
+    tmp_path: /var/tmp
+    rpmpack: CARKaim-10.10.00.60.x86_64.rpm
+
+  tasks:
+  - name: Get credentials via CCP
+    shell: sudo curl --output {{tmp_json}} -k -O --request GET '{{pvwa}}/AIMWebService/api/Accounts?AppID=ansible_controllers&Safe=CyberArk-App&Query=object=Application-CyberArk-10.0.10.1-CP_InstallUser'
+    args:
+      chdir: "{{tmp_folder}}"
+     
+  - name: Filter out password from json data
+    shell: cat {{tmp_json}} | jq .Content | sed 's/"//g'
+    register: rdata1
+    args:
+      chdir: "{{tmp_folder}}"
+
+  - name: Filter out username from json data
+    shell: cat {{tmp_json}} | jq .UserName | sed 's/"//g'
+    register: rdata2
+    args:
+      chdir: "{{tmp_folder}}"
+
+  - name: Filter out Vault IP from json data
+    shell: cat {{tmp_json}} | jq .Address | sed 's/"//g'
+    register: rdata3
+    args:
+      chdir: "{{tmp_folder}}"
+
+  - name: Set Extracted fields into variables
+    set_fact:
+      password: "{{rdata1.stdout}}"
+      username: "{{rdata2.stdout}}"
+      vault: "{{rdata3.stdout}}"
+      debug: msg= "Please refer to file.json contents if this step fails"
+    failed_when: >
+      password == "null" or
+      username == "null" or
+      vault == "null" or
+      password == "" or
+      username == "" or
+      vault == ""
+
+  - debug: 
+      msg: "Password Extracted: {{password}}"
+
+  - debug:
+      msg: "Username Extracted: {{username}}"
+
+  - debug:
+      msg: "Vault IP Extracted: {{vault}}"
+
+  - name: Remove file.json
+    shell: sudo rm {{tmp_folder}}/{{tmp_json}}
+
+  - name: Copy Installer Files
+    shell: sudo cp /home/user01/{{zip_file}} /opt/InstallFiles/
+
+  - name: Unpack Zip File
+    shell: sudo unzip /opt/InstallFiles/{{zip_file}} -d /opt/InstallFiles
+
+  - name: move and rename Install Folder
+    shell: sudo mv /opt/InstallFiles/RHELinux\ x64 {{install_path}}
+
+  - name: change install folder ownership
+    shell: sudo chown -R user01:100 {{install_path}}
+
+  - name: Change vault.ini file permission
+    shell: sudo chmod 700 {{install_path}}/Vault.ini
+
+  - name: Configure vault.ini file
+    replace:
+      path: '{{install_path}}/Vault.ini'
+      regexp: '^ADDRESS=.*$'
+      replace: 'ADDRESS={{vault}}'
+
+  - name: Change CredFile file permission
+    shell: sudo chmod 700 {{install_path}}/CreateCredFile
+
+  - name: Create Cred File
+    shell: sudo {{install_path}}/CreateCredFile {{install_path}}/user.ini Password -Username {{username}} -Password {{password}}
+
+  - name: Copy and rename aimparms.sample to /var/tmp/aimparms
+    shell: sudo cp {{install_path}}/aimparms.sample {{tmp_path}}/aimparms
+
+  - name: change file ownership
+    shell: sudo chown user01:100 {{tmp_path}}/aimparms
+
+  - name: Configure aimparms file
+    replace:
+      path: '{{tmp_path}}/aimparms'
+      regexp: "{{item.regexp}}"
+      replace: "{{item.replace}}"
+    with_items:
+      - {regexp: '^AcceptCyberArkEULA=.*$', replace: 'AcceptCyberArkEULA=Yes'}
+      - {regexp: '^.?CreateVaultEnvironment=.*$', replace: 'CreateVaultEnvironment=Yes'}
+      - {regexp: '^LicensedProducts=.*$', replace: 'LicensedProducts=AIM'}
+      - {regexp: '^CredFilePath=.*$', replace: 'CredFilePath={{install_path}}/user.ini'}
+      - {regexp: '^VaultFilePath=.*$', replace: 'VaultFilePath={{install_path}}/Vault.ini'}
+
+  - name: Initiate Installation
+    shell: sudo rpm -ivh {{install_path}}/{{rpmpack}}
+
+  - name: Check aimprv service
+    shell: sudo service aimprv status
+    register: aimprv_status
+
+  - debug: 
+      var: aimprv_status
+
+  - name: Cleanup Installation Files
+    shell: sudo rm -rf /opt/InstallFiles/*
+
+...
