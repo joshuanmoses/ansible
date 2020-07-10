@@ -1,0 +1,8 @@
+---
+- !policy
+      id: ansible
+      body:
+        # Secret Declarations
+        - &secrets
+          - !variable tst_user
+          - !variable tst_pass
