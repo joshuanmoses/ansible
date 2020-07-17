@@ -2,7 +2,7 @@
 - hosts: localhost
   gather_facts: false
   vars:
-    pvwa: https://comp01a.cyber-ark-demo.local
+    pvwa: https://comp01a.myorg.local
     tmp_folder: /home/user01/Ansible-Deploy-CP
     tmp_json: file.json
     zip_file: RHELinux-x64-10.10.zip
