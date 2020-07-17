@@ -3,7 +3,7 @@
   gather_facts: false
   vars:
     vault: 10.0.10.1
-    pvwa: https://comp01a.cyber-ark-demo.local
+    pvwa: https://comp01a.myorg.local
     zip_file: RHELinux-x64-v10.10.zip
     username: administrator
     password: Cyberark1
